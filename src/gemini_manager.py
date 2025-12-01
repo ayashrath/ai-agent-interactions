@@ -6,8 +6,6 @@ Not making it asynchronous as even in multi-agent stuff, I want the stuff to be 
 TODO: Add a rate limiter or something maybe?
 TODO: Maybe more colourful cli output
 TODO: Calculate input and output token values
-TODO: Add config for agents
-TODO: Allow tool access
 TODO: Add proper type casting
 """
 
@@ -19,23 +17,25 @@ import yaml
 import os
 import time
 from datetime import datetime
+from termcolor import cprint
 from db_manager import dump_history
+from typing import List, Tuple, Any, Dict
 
 
 # consts
-VALID_SAFETY_VALUES = [
+VALID_SAFETY_VALUES: List[str] = [
     "HARM_CATEGORY_HARASSMENT",
     "HARM_CATEGORY_HATE_SPEECH",
     "HARM_CATEGORY_SEXUALLY_EXPLICIT",
     "HARM_CATEGORY_DANGEROUS_CONTENT",
     "HARM_CATEGORY_CIVIC_INTEGRITY"
 ]  # these 5 are the only supported ones for gemini
-SAFETY_THRESHOLDS = [
+SAFETY_THRESHOLDS: List[str] = [
     "BLOCK_LOW_AND_ABOVE",
     "BLOCK_MEDIUM_AND_ABOVE",
     "BLOCK_ONLY_HIGH",
 ]
-TOOL_CONFIG_VALUES = [
+TOOL_CONFIG_VALUES: List[str] = [
     "AUTO",
     "ANY",
     "NONE",
@@ -58,6 +58,9 @@ class GeminiAgent:
         self.context = []  # context data
 
     def reset_context(self):
+        """
+        Reset context memory
+        """
         self.context = []
 
     def add_context(self, info_name: str, info: str):
@@ -70,6 +73,12 @@ class GeminiAgent:
         self.context.append(f"[{info_name}]{info}")
 
     def record_history(self, prompt: str, response: str):
+        """
+        Records the history in a list of dicts
+        :param prompt: prompt str
+        :param response: response str
+        :return:
+        """
         timestamp = datetime.now().isoformat()
         self.history.append(
             {
@@ -82,6 +91,11 @@ class GeminiAgent:
         )
 
     def dump_history(self, project_name: str = ""):
+        """
+        Dumps the history into a sqlite db
+        :param project_name: sqlite table name (default = default_project)
+        :return:
+        """
         # dump history
         dump_history(self.history, project_name=project_name)
         self.history = []
@@ -92,16 +106,16 @@ class GeminiConfig:
     """
     def __init__(
             self,
-            system_instruction = None,  # overriding personality
-            tools = None,  # tools like maps, google search, url, etc.; or even user created function
-            tool_config_mode = None,  # the mode of config
-            allowed_tool_for_config = None,  # lst of stuff effected by config_mode
-            safety_setting = None,  # safety settings
-            temperature = None,  # temperature (randomness)
-            top_p = None,  # considers the smallest set of top tokens whose cumulative probability is p
-            top_k = None,  # model only considers the top K most tokens
-            max_output_tokens = None,  # max tokens that will be consumed by output,
-            response_mime_type = "text/plain",  # the kind of response
+            system_instruction: str = None,  # overriding personality
+            tools: List[str] = None,  # tools like maps, google search, url, etc.; or even user created function
+            tool_config_mode: types.FunctionCallingConfigMode = None,  # the mode of config
+            allowed_tool_for_config: List[str] = None,  # lst of stuff effected by config_mode
+            safety_setting: Dict[types.HarmCategory, types.HarmBlockThreshold] = None,  # safety settings
+            temperature: float = None,  # temperature (randomness)
+            top_p: float = None,  # considers the smallest set of top tokens whose cumulative probability is p
+            top_k: float = None,  # model only considers the top K most tokens
+            max_output_tokens: int = None,  # max tokens that will be consumed by output,
+            response_mime_type: str = "text/plain",  # the kind of response
     ):
         # Implement thinking level can be used, but it is recommended to get high in 3.0 (as it states it is prone to
         # error below that
@@ -166,6 +180,10 @@ class GeminiConfig:
         self.response_mime_types = response_mime_type
 
     def get_config_data(self):
+        """
+        Returns config data
+        :return: config data for AI
+        """
         return self.config
 
 
@@ -223,7 +241,6 @@ class GeminiManager:
     def _build_prompt(agent: GeminiAgent, prompt: str):
         """
         Adds context and message - using gemini's suggested way to add it now
-        TODO: Add a char limit and stuff so that I don't overwhelm my usage
 
         :param agent: Name of Agent
         :param prompt: Prompt (can be "")
@@ -248,7 +265,8 @@ class GeminiManager:
         agent = self.agents[agent_name]
         prompt = self._build_prompt(agent, prompt_str)
         if print_response:
-            print(f"Input: {prompt}\n\nOutput:")
+            cprint(f"Input: {prompt}\n\n", "green")
+        cprint("Output:", "blue")
 
         response = ""
 
@@ -260,37 +278,55 @@ class GeminiManager:
                 for chunk in agent.chat_obj.send_message_stream(prompt):
                     response += chunk.text
                     if print_response:
-                        print(chunk.text, end="", flush=True)
+                        cprint(chunk.text, end = "", flush = True, color = "blue")
                 agent.record_history(prompt, response)
                 agent.reset_context()
                 if print_response:
-                    print(f"\nTime Elapsed: {(time.time() - st_time):.2f} seconds\n")  # newline
+                    cprint(f"\n\nTime Elapsed: {(time.time() - st_time):.2f} seconds\n", "yellow")  # newline
                 return response
             except Exception as e:
-                print(f"Some Exception {e}")
+                cprint(f"Some Exception {e}", "red")
                 time.sleep(20 * 2 ** i)  # have 25 seconds as my Wi-Fi drops sometimes - thus makes sure it persists
                 continue
 
         raise RuntimeError("Couldn't connect with the server or timeout")
 
-    def close_client(self, project_name=""):
+    def close_client(self, project_name: str = ""):
         for agent in self.agents.values():
             agent.dump_history(project_name=project_name)
         self.client.close()
 
 
 if __name__ == "__main__":
-    # test
-    try:
-        mgr = GeminiManager()
-        mgr.create_agent("poet", "gemini-2.5-flash")  # Example model
+    # Prepare two configs and two agents, then send one message to each (no error catching)
+    cfg_poet = GeminiConfig(
+        system_instruction="You are a lyrical poet. Keep responses short.",
+        temperature=0.7,
+        max_output_tokens=200,
+    )
 
-        # Test context
-        mgr.add_info("poet", "The user loves robots.", "Background")
+    cfg_helper = GeminiConfig(
+        system_instruction="You are a concise technical assistant.",
+        temperature=0.2,
+        max_output_tokens=300,
+    )
 
-        mgr.send_message("poet", "Death is the best!.")
-    except Exception as e:
-        print(f"Fatal Error: {e}")
-    finally:
-        if 'mgr' in locals():
-            mgr.close_client()
+    mgr = GeminiManager()
+
+    # create two agents with configs
+    mgr.create_agent("poet", "gemini-2.5-flash", config=cfg_poet)
+    mgr.create_agent("helper", "gemini-2.5-flash", config=cfg_helper)
+
+    # add distinct context for each
+    mgr.add_info("poet", "The user loves robots and sonnets.", "Background")
+    mgr.add_info("helper", "Prefer short, actionable answers.", "Guideline")
+
+    # send one message to each agent and print responses
+    resp_poet = mgr.send_message("poet", "Write a two-line poem about robots.", print_response=True)
+    print("\nPoet response:\n", resp_poet)
+
+    resp_helper = mgr.send_message("helper", "How to optimize a Python loop?", print_response=True)
+    print("\nHelper response:\n", resp_helper)
+
+    # close and persist histories
+    mgr.close_client()
