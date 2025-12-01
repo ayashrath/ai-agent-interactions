@@ -224,18 +224,20 @@ class GeminiManager:
 
         self.agents[agent_name] = agent
 
-    def add_info(self, agent_name, info: str, info_name: str = "info"):
+        return agent
+
+    def add_info(self, agent, info: str, info_name: str = "info"):
         """
         Allows to add stuff the agent must know - like say some other agent's responses (for example)
 
-        :param agent_name: Name of agent the context must be known to
+        :param agent: The agent where you want to add context
         :param info: The extra context
         :param info_name: Name of info (say some agent's name or something) - default = "info"
         """
-        if agent_name not in self.agents:
-            raise ValueError(f"{agent_name} doesn't exist!")
+        if agent.name not in self.agents:
+            raise ValueError(f"{agent.name} doesn't exist!")
 
-        self.agents[agent_name].add_context(info_name, info)
+        agent.add_context(info_name, info)
 
     @staticmethod
     def _build_prompt(agent: GeminiAgent, prompt: str):
@@ -251,18 +253,17 @@ class GeminiManager:
             return f"Context:\n{full_context}\n\nUser Query:\n{prompt}".strip()
         return prompt
 
-    def send_message(self, agent_name: str, prompt_str: str, print_response: bool = True):
+    def send_message(self, agent: GeminiAgent, prompt_str: str, print_response: bool = True):
         """
         Sends prompt over to the servers
 
-        :param agent_name: Name of the agent
+        :param agent: The agent
         :param prompt_str: Message to be sent ("" if it just needs to feed off context)
         :param print_response: Do you want it to print responses
         """
-        if agent_name not in self.agents:
-            raise ValueError(f"{agent_name} doesn't exist")
+        if agent.name not in self.agents:
+            raise ValueError(f"{agent.name} doesn't exist")
 
-        agent = self.agents[agent_name]
         prompt = self._build_prompt(agent, prompt_str)
         if print_response:
             cprint(f"Input: {prompt}\n\n", "green")
@@ -314,18 +315,18 @@ if __name__ == "__main__":
     mgr = GeminiManager()
 
     # create two agents with configs
-    mgr.create_agent("poet", "gemini-2.5-flash", config=cfg_poet)
-    mgr.create_agent("helper", "gemini-2.5-flash", config=cfg_helper)
+    poet_agent = mgr.create_agent("poet", "gemini-2.5-flash", config=cfg_poet)
+    helper_agent = mgr.create_agent("helper", "gemini-2.5-flash", config=cfg_helper)
 
     # add distinct context for each
-    mgr.add_info("poet", "The user loves robots and sonnets.", "Background")
-    mgr.add_info("helper", "Prefer short, actionable answers.", "Guideline")
+    mgr.add_info(poet_agent, "The user loves robots and sonnets.", "Background")
+    mgr.add_info(helper_agent, "Prefer short, actionable answers.", "Guideline")
 
     # send one message to each agent and print responses
-    resp_poet = mgr.send_message("poet", "Write a two-line poem about robots.", print_response=True)
+    resp_poet = mgr.send_message(poet_agent, "Write a two-line poem about robots.", print_response=True)
     print("\nPoet response:\n", resp_poet)
 
-    resp_helper = mgr.send_message("helper", "How to optimize a Python loop?", print_response=True)
+    resp_helper = mgr.send_message(helper_agent, "How to optimize a Python loop?", print_response=True)
     print("\nHelper response:\n", resp_helper)
 
     # close and persist histories
