@@ -6,3 +6,6 @@
 
 # the .env file - have your api keys here (works for me, but save it in someother way as per your preference)
 .env
+
+# any pyc files
+*.pyc

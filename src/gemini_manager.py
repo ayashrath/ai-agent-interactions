@@ -5,6 +5,8 @@ Not making it asynchronous as even in multi-agent stuff, I want the stuff to be 
 
 TODO: Add a rate limiter or something maybe?
 TODO: Maybe more colourful cli output
+TODO: Calculate input and output token values
+TODO: Add config for agents
 """
 
 from dotenv import load_dotenv
@@ -12,9 +14,9 @@ from google import genai
 from google.genai.chats import Chat
 import yaml
 import os
-import asyncio
 import time
 from datetime import datetime
+from db_manager import dump_history
 
 
 class GeminiAgent:
@@ -55,8 +57,9 @@ class GeminiAgent:
         }
         )
 
-    def dump_history(self):
+    def dump_history(self, project_name: str = ""):
         # dump history
+        dump_history(self.history, project_name=project_name)
         self.history = []
 
 class GeminiManager:
@@ -102,38 +105,36 @@ class GeminiManager:
         if agent_name not in self.agents:
             raise ValueError(f"{agent_name} doesn't exist!")
 
-        self.agents[agent_name].add_context(info, info_name)
+        self.agents[agent_name].add_context(info_name, info)
 
     @staticmethod
-    def _build_prompt(self, agent: GeminiAgent, prompt: str):
+    def _build_prompt(agent: GeminiAgent, prompt: str):
         """
-        Adds context and message
+        Adds context and message - using gemini's suggested way to add it now
         TODO: Add a char limit and stuff so that I don't overwhelm my usage
 
         :param agent: Name of Agent
         :param prompt: Prompt (can be "")
         """
 
-        if prompt != "":
-            prompt = "\n\n".join(agent.context) + "\n\n[user]" + prompt
-        else:
-            prompt = "\n\n".join(agent.context)
-
+        full_context = "\n".join(agent.context)
+        if full_context:
+            return f"Context:\n{full_context}\n\nUser Query:\n{prompt}".strip()
         return prompt
 
-    def send_message(self, agent_name: str, prompt: str, print_response: bool = True):
+    def send_message(self, agent_name: str, prompt_str: str, print_response: bool = True):
         """
         Sends prompt over to the servers
 
         :param agent_name: Name of the agent
-        :param prompt: Message to be sent ("" if it just needs to feed off context)
+        :param prompt_str: Message to be sent ("" if it just needs to feed off context)
         :param print_response: Do you want it to print responses
         """
         if agent_name not in self.agents:
             raise ValueError(f"{agent_name} doesn't exist")
 
         agent = self.agents[agent_name]
-        prompt = self._build_prompt(agent, prompt)
+        prompt = self._build_prompt(agent, prompt_str)
         agent.reset_context()
         if print_response:
             print(f"Input: {prompt}\n\nOutput:")
@@ -152,7 +153,7 @@ class GeminiManager:
                 break
             except Exception as e:
                 print(f"Some Exception {e}")
-                time.sleep(15 * i)
+                time.sleep(25 * i)  # have 25 seconds as my wifi drops sometimes - thus makes sure it persists
                 continue
 
         if response == "":
@@ -164,29 +165,24 @@ class GeminiManager:
         agent.record_history(prompt, response)
         return response
 
-    def close_client(self):
+    def close_client(self, project_name=""):
+        for agent in self.agents:
+            self.agents[agent].dump_history(project_name=project_name)
         self.client.close()
 
 
 if __name__ == "__main__":
-    # Example synchronous usage for `src/gemini_manager.py`
-    manager = None
+    # test
     try:
-        manager = GeminiManager()
-        print("Creating agents...")
-        manager.create_agent("story_writer", "gemini-2.5-flash")
-        manager.create_agent("code_reviewer", "gemini-2.5-flash")
-        print("Agents created.")
-        print("-" * 40)
+        mgr = GeminiManager()
+        mgr.create_agent("poet", "gemini-2.5-flash")  # Example model
 
-        manager.send_message("story_writer", "Tell me a short story about a brave knight within 10 words.")
-        print("-" * 40)
+        # Test context
+        mgr.add_info("poet", "The user loves robots.", "Background")
 
-        manager.send_message("code_reviewer", "What is a python list comprehension? Give a short example within 10 words.")
-        print("-" * 40)
+        mgr.send_message("poet", "Death is the best!.")
     except Exception as e:
-        print(f"Error: {e}")
+        print(f"Fatal Error: {e}")
     finally:
-        if manager:
-            manager.close_client()
-            print("Client closed.")
+        if 'mgr' in locals():
+            mgr.close_client()
