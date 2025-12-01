@@ -9,3 +9,6 @@
 
 # any pyc files
 *.pyc
+
+# data
+data/
