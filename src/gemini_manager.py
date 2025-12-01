@@ -1,17 +1,19 @@
 """
 Class to make gemini chat work
 
-Not making it asynchronous as even in multi-agent stuff, I want the stuff to be synchronous
+Not making it asynchronous as even in multi-agent stuff, I want the stuff to be synchronous.
 
 TODO: Add a rate limiter or something maybe?
 TODO: Maybe more colourful cli output
 TODO: Calculate input and output token values
 TODO: Add config for agents
+TODO: Allow tool access
 """
 
 from dotenv import load_dotenv
 from google import genai
 from google.genai.chats import Chat
+from google.genai import types
 import yaml
 import os
 import time
@@ -62,6 +64,13 @@ class GeminiAgent:
         dump_history(self.history, project_name=project_name)
         self.history = []
 
+class GeminiConfig:
+    """
+    Helper function to create configs
+    """
+    def __init__(self, ):
+        pass
+
 class GeminiManager:
     """
     Manages Gemini Stuff
@@ -78,18 +87,23 @@ class GeminiManager:
             models = yaml.safe_load(fh)
             self.valid_models = models["gemini"]
 
-    def create_agent(self, agent_name: str, model_name: str):
+    def create_agent(self, agent_name: str, model_name: str, config = None):
         """
         Creates the agent (chat)
 
         :param agent_name: Name of agent
         :param model_name: Model to use
+        :param config: Gemini config
         """
         if agent_name in self.agents:
             raise ValueError(f"{agent_name} already exists!")
         elif model_name not in self.valid_models:
             raise ValueError(f"{model_name} is not valid!")
-        chat = self.client.chats.create(model=model_name)
+
+        if config is None:
+            chat = self.client.chats.create(model=model_name)
+        else:
+            chat = self.client.chats.create(model=model_name, config=config)
         agent = GeminiAgent(agent_name, model_name, chat)
 
         self.agents[agent_name] = agent
