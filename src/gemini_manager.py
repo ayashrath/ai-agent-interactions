@@ -16,7 +16,7 @@ import time
 from datetime import datetime
 from termcolor import cprint
 from db_manager import dump_history
-from typing import List, Dict
+from typing import List, Dict, Any
 
 
 # consts
@@ -27,6 +27,7 @@ VALID_SAFETY_VALUES: List[str] = [
     "HARM_CATEGORY_DANGEROUS_CONTENT",
     "HARM_CATEGORY_CIVIC_INTEGRITY"
 ]  # these 5 are the only supported ones for gemini
+VALID_GOOGLE_TOOLS: List[str] = []  # TODO: fill in when needed
 SAFETY_THRESHOLDS: List[str] = [
     "BLOCK_LOW_AND_ABOVE",
     "BLOCK_MEDIUM_AND_ABOVE",
@@ -37,99 +38,23 @@ TOOL_CONFIG_VALUES: List[str] = [
     "ANY",
     "NONE",
 ]
-AVALIABLE_MODELS: List[str] = [
+AVAILABLE_MODELS: List[str] = [
     "gemini-3-pro-preview",  # most expensive
     "gemini-2.5-flash",  # ok-ish
     "gemini-2.5-flash-lite",  # cheapest
 ]  # these are the only ones I care about for now
-
-
-class GeminiConfig:
-    """
-    Helper function to create configs
-    """
-    def __init__(
-            self,
-            system_instruction: str = None,  # overriding personality
-            tools: List[str] = None,  # tools like maps, google search, url, etc.; or even user created function
-            tool_config_mode: types.FunctionCallingConfigMode = None,  # the mode of config
-            allowed_tool_for_config: List[str] = None,  # lst of stuff effected by config_mode
-            safety_setting: Dict[types.HarmCategory, types.HarmBlockThreshold] = None,  # safety settings
-            temperature: float = None,  # temperature (randomness)
-            top_p: float = None,  # considers the smallest set of top tokens whose cumulative probability is p
-            top_k: float = None,  # model only considers the top K most tokens
-            max_output_tokens: int = None,  # max tokens that will be consumed by output,
-            response_mime_type: str = "text/plain",  # the kind of response
-    ):
-        # Implement thinking level can be used, but it is recommended to get high in 3.0 (as it states it is prone to
-        # error below that
-
-        # safety is a list of dict with key being the category and the value being the threshold (there are other
-        # measures, but I have ignored them (ignoring safety rating and harm probability for now)
-
-        safety_setting_collected = None
-
-        if safety_setting is not None:
-            safety_setting_collected = []
-            for category, threshold in safety_setting.items():
-                if category not in VALID_SAFETY_VALUES:
-                    raise ValueError(f"{category} is not a valid safety category (use uppercase)")
-                if threshold not in SAFETY_THRESHOLDS:
-                    raise ValueError(f"{threshold} is not a valid safety threshold (use uppercase)")
-                safety_setting_collected.append(
-                    types.SafetySetting(category=category, threshold=threshold)
-                )
-
-        # check toolconfig options - you can have only one
-        if tool_config_mode is None and allowed_tool_for_config is not None:
-            raise ValueError(
-                f"You need to provide a tool config mode if you want to use tool_config (maybe use all uppercase)"
-            )
-        if tool_config_mode is not None and tool_config_mode not in TOOL_CONFIG_VALUES:
-            raise ValueError(f"{tool_config_mode} Tool Config mode is invalid (maybe use all uppercase)")
-
-        config_kwargs = {}
-        if temperature is not None:
-            config_kwargs["temperature"] = temperature
-        if top_p is not None:
-            config_kwargs["top_p"] = top_p
-        if top_k is not None:
-            config_kwargs["top_k"] = top_k
-        if max_output_tokens is not None:
-            config_kwargs["max_output_tokens"] = max_output_tokens
-        if system_instruction is not None:
-            config_kwargs["system_instruction"] = system_instruction
-        if tools is not None:
-            config_kwargs["tools"] = tools
-        if response_mime_type is not None:
-            config_kwargs["response_mime_type"] = response_mime_type
-        if safety_setting_collected is not None:
-            config_kwargs["safety_config"] = safety_setting_collected
-        if tool_config_mode is not None and allowed_tool_for_config is None:
-            config_kwargs["tool_config"] = types.ToolConfig(
-                function_calling_config=types.FunctionCallingConfig(mode=tool_config_mode)
-            )
-        if tool_config_mode is not None and allowed_tool_for_config is not None:
-            config_kwargs["tool_config"] = types.ToolConfig(
-                function_calling_config=types.FunctionCallingConfig(
-                    mode=tool_config_mode,
-                    allowed_function_names=allowed_tool_for_config,
-                )
-            )
-
-        self.config = types.GenerateContentConfig(**config_kwargs)
-
-        # for using later if needed
-        self.tools = tools
-        self.response_mime_types = response_mime_type
-
-    def get_config_data(self):
-        """
-        Returns config data
-        :return: config data for AI
-        """
-        return self.config
-
+available_config_options = [
+    "system_instruction",
+    "tools",
+    "tool_config_mode",
+    "allowed_tool_for_config",
+    "safety_setting",
+    "temperature",
+    "top_p",
+    "top_k",
+    "max_output_tokens",
+    "response_mime_type",
+]
 
 class GeminiAgent:
     """
@@ -139,13 +64,13 @@ class GeminiAgent:
     model_name: model to use
     chat: the AsyncChat object
     """
-    def __init__(self, name: str, model_name: str, client: genai.client.Client, config: GeminiConfig):
-        if model_name not in AVALIABLE_MODELS:
+    def __init__(self, name: str, model_name: str, client: genai.client.Client, config: Dict[str, Any] = None):
+        if model_name not in AVAILABLE_MODELS:
             raise ValueError(f"{model_name} is not valid!")
         if config is None:
             chat = client.chats.create(model=model_name)
         else:
-            chat = client.chats.create(model=model_name, config=config.get_config_data())
+            chat = client.chats.create(model=model_name, config=self._parse_config(config))
 
         self.name = name
         self.model_name = model_name
@@ -156,6 +81,139 @@ class GeminiAgent:
 
         cprint(f"Remember to close the client and also dump history when done with the agent {self.name}", "red")
 
+    @staticmethod
+    def _parse_config(config: Dict[str, Any]) -> types.GenerateContentConfig:
+        """
+        Parses the config into something Gemini can understand
+        :param config: config dict
+        :return: Gemini config object
+
+        Example config:
+        ```
+        config_example = {
+            "system_instruction": "abc",
+            "tools": ["tool1", "tool2"],
+            "safety_setting": {
+                "HARM_CONTENT_HARASSMENT":"BLOCK_ONLY_HIGH",
+                "HARM_CATEGORY_HATE_SPEECH":"BLOCK_ONLY_HIGH",
+            },
+            "tool_config_mode": "AUTO",
+            "allowed_tool_for_config": ["tool1"],
+            "temperature": 0.7,
+            "top_p": 0.9,
+            "top_k": 40,
+            "max_output_tokens": 1024,
+            "response_mime_type": "text/plain"
+        }
+        ```
+        """
+
+        extra = set(config.keys()) - set(available_config_options)
+        if extra:
+            raise ValueError(f"Unknown config keys: {sorted(extra)}")
+
+        # system_instruction
+        system_instruction = config.get("system_instruction")
+        if system_instruction is not None and not isinstance(system_instruction, str):
+            raise ValueError("system_instruction must be a string")
+
+        # tools
+        tools = config.get("tools")
+        if tools is not None:
+            if not isinstance(tools, list) or not all(isinstance(t, str) for t in tools):
+                raise ValueError("tools must be a list of strings")
+
+        # safety_setting
+        safety_setting = config.get("safety_setting")
+        safety_setting_collected = None
+        if safety_setting is not None:
+            if not isinstance(safety_setting, dict):
+                raise ValueError("safety_setting must be a dict")
+            safety_setting_collected = []
+            for category, threshold in safety_setting.items():
+                if category not in VALID_SAFETY_VALUES:
+                    raise ValueError(f"{category} is not a valid safety category (use uppercase)")
+                if threshold not in SAFETY_THRESHOLDS:
+                    raise ValueError(f"{threshold} is not a valid safety threshold (use uppercase)")
+                safety_setting_collected.append(
+                    types.SafetySetting(category=category, threshold=threshold)
+                )
+
+        # tool_config_mode
+        tool_config_mode = config.get("tool_config_mode")
+        if tool_config_mode is not None:
+            if not isinstance(tool_config_mode, str) or tool_config_mode not in TOOL_CONFIG_VALUES:
+                raise ValueError(f"{tool_config_mode} Tool Config mode is invalid (maybe use all uppercase)")
+
+        # allowed_tool_for_config
+        allowed_tool_for_config = config.get("allowed_tool_for_config")
+        if allowed_tool_for_config is not None:
+            if not isinstance(allowed_tool_for_config, list) or not all(
+                    isinstance(t, str) for t in allowed_tool_for_config):
+                raise ValueError("allowed_tool_for_config must be a list of strings")
+            if tools is not None and not set(allowed_tool_for_config).issubset(set(tools)):
+                raise ValueError("allowed_tool_for_config must be a subset of tools")
+
+        # temperature
+        temperature = config.get("temperature")
+        if temperature is not None:
+            if not isinstance(temperature, (int, float)) or not (0.0 <= float(temperature) <= 2.0):
+                raise ValueError("temperature must be a number between 0.0 and 2.0")
+
+        # top_p
+        top_p = config.get("top_p")
+        if top_p is not None:
+            if not isinstance(top_p, (int, float)) or not (0.0 <= float(top_p) <= 1.0):
+                raise ValueError("top_p must be a number between 0.0 and 1.0")
+
+        # top_k
+        top_k = config.get("top_k")
+        if top_k is not None:
+            if not isinstance(top_k, int) or top_k < 0:
+                raise ValueError("top_k must be a non-negative integer")
+
+        # max_output_tokens
+        max_output_tokens = config.get("max_output_tokens")
+        if max_output_tokens is not None:
+            if not isinstance(max_output_tokens, int) or max_output_tokens <= 0:
+                raise ValueError("max_output_tokens must be a positive integer")
+
+        # response_mime_type
+        response_mime_type = config.get("response_mime_type")
+        if response_mime_type is not None and not isinstance(response_mime_type, str):
+            raise ValueError("response_mime_type must be a string")
+
+        # Build config kwargs
+        config_kwargs = {}
+        if temperature is not None:
+            config_kwargs["temperature"] = float(temperature)
+        if top_p is not None:
+            config_kwargs["top_p"] = float(top_p)
+        if top_k is not None:
+            config_kwargs["top_k"] = int(top_k)
+        if max_output_tokens is not None:
+            config_kwargs["max_output_tokens"] = int(max_output_tokens)
+        if system_instruction is not None:
+            config_kwargs["system_instruction"] = system_instruction
+        if tools is not None:
+            config_kwargs["tools"] = tools
+        if response_mime_type is not None:
+            config_kwargs["response_mime_type"] = response_mime_type
+        if safety_setting_collected is not None:
+            config_kwargs["safety_config"] = safety_setting_collected
+        if tool_config_mode is not None and allowed_tool_for_config is None:
+            config_kwargs["tool_config"] = types.ToolConfig(
+                function_calling_config=types.FunctionCallingConfig(mode = tool_config_mode)
+            )
+        if tool_config_mode is not None and allowed_tool_for_config is not None:
+            config_kwargs["tool_config"] = types.ToolConfig(
+                function_calling_config=types.FunctionCallingConfig(
+                    mode = tool_config_mode,
+                    allowed_function_names=allowed_tool_for_config,
+                )
+            )
+
+        return types.GenerateContentConfig(**config_kwargs)
 
     def reset_context(self):
         """
@@ -265,37 +323,36 @@ def close_client(client):
 # python
 if __name__ == "__main__":
     client = create_gemini_client()
-    try:
-        cfg_poet = GeminiConfig(
-            system_instruction="You are a lyrical poet. Keep responses short.",
-            temperature=0.7,
-            max_output_tokens=200,
-        )
+    cfg_poet = {
+        "system_instruction": "You are a lyrical poet. Keep responses short.",
+        "temperature": 0.7,
+        "max_output_tokens": 200,
+        "response_mime_type": "text/plain",
+    }
 
-        cfg_helper = GeminiConfig(
-            system_instruction="You are a concise technical assistant.",
-            temperature=0.2,
-            max_output_tokens=300,
-        )
+    cfg_helper = {
+        "system_instruction": "You are a concise technical assistant.",
+        "temperature": 0.2,
+        "max_output_tokens": 300,
+        "response_mime_type": "text/plain",
+    }
 
-        # create two agents with configs
-        poet_agent = GeminiAgent("poet", "gemini-2.5-flash", client, cfg_poet)
-        helper_agent = GeminiAgent("helper", "gemini-2.5-flash", client, cfg_helper)
+    # create two agents with dict configs
+    poet_agent = GeminiAgent("poet", "gemini-2.5-flash", client, cfg_poet)
+    helper_agent = GeminiAgent("helper", "gemini-2.5-flash", client, cfg_helper)
 
-        # add distinct context for each (info_name first, info second)
-        poet_agent.add_context("Background", "The user loves robots and sonnets.")
-        helper_agent.add_context("Guideline", "Prefer short, actionable answers.")
+    # add distinct context for each (info_name first, info second)
+    poet_agent.add_context("Background", "The user loves robots and sonnets.")
+    helper_agent.add_context("Guideline", "Prefer short, actionable answers.")
 
-        print("\nPoet response:\n")
-        # send one message to each agent and print responses
-        resp_poet = poet_agent.send_message("Write a two-line poem about robots.", print_response=True)
+    print("\nPoet response:\n")
+    resp_poet = poet_agent.send_message("Write a two-line poem about robots.", print_response=True)
 
-        print("\nHelper response:\n")
-        resp_helper = helper_agent.send_message("How to optimize a Python loop?", print_response=True)
+    print("\nHelper response:\n")
+    resp_helper = helper_agent.send_message("How to optimize a Python loop?", print_response=True)
 
-        # persist histories
-        poet_agent.dump_history(project_name="default_project")
-        helper_agent.dump_history(project_name="default_project")
-    finally:
-        close_client(client)
+    # persist histories
+    poet_agent.dump_history(project_name="default_project")
+    helper_agent.dump_history(project_name="default_project")
 
+    close_client(client)
