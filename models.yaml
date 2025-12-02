@@ -1,9 +1,0 @@
-# the models I am allowing
-gemini:
-  - "gemini-3-pro-preview"  # too expensive
-  - "gemini-2.5-flash"  # ok-ish
-  - "gemini-2.5-flash-lite"  # cheap
-openai:  # not using non-mini, else will be too expensive
-  - "o4-mini"  # most expensive
-  - "gpt-4o-mini"  # cheapest
-  - "gpt-5-mini"  # cheap
