@@ -3,10 +3,9 @@ Class to make gemini chat work
 
 Not making it asynchronous as even in multi-agent stuff, I want the stuff to be synchronous.
 
-TODO: Add a rate limiter or something maybe?
-TODO: Maybe more colourful cli output
-TODO: Calculate input and output token values
+TODO: Calculate input and output token values - and limit accordingly
 TODO: Add proper type casting
+TODO: Async possibility
 """
 
 from dotenv import load_dotenv
@@ -155,7 +154,7 @@ class GeminiAgent:
 
         self.chat_obj = chat  # the thing that makes it a different instance with Gemini servers
 
-        cprint(f"Remember to close the client and also dump history when done with the agent {self.name}", "yellow")
+        cprint(f"Remember to close the client and also dump history when done with the agent {self.name}", "red")
 
 
     def reset_context(self):
