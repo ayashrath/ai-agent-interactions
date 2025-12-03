@@ -41,7 +41,7 @@ while True:
     total_cost = ai_manager.calculate_total_cost()
     cprint(f"\nTotal Money ${total_cost:.6f}\n", "yellow")
 
-    if counter % 1 == 0:
+    if counter % 5 == 0:
         ai_manager.dump_all_histories(project_name)
         inp = input("Continue for 5 more turns? (y/n): ")
         if inp.lower() != "y":
