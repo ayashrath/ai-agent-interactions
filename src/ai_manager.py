@@ -23,7 +23,7 @@ And the following functions:
 
 And based on requirements the model might have constants to define possible models, parameters, etc.
 
-TODO: TMP not checked for now, as well as RPD and RPM handling
+TODO: TMP not checked for now
 """
 
 import src.gemini_manager as gm
@@ -54,22 +54,8 @@ class AIManager:
     def __init__(self):
         self.agent_dict = {}
         self.client_dict = {}
-        self.rmp = None  # requests per minute
-        self.tpm = None  # tokens per minute
-        self.rpd = None  # requests per day
 
         cprint("Use lowercase for names", "red")
-
-    def set_limits(self, rpm, tpm, rpd):
-        """
-        Sets the rate limits for all AI clients
-        :param rpm: Requests per minute
-        :param tpm: Tokens per minute
-        :param rpd: Requests per day
-        """
-        self.rmp = rpm
-        self.tpm = tpm
-        self.rpd = rpd
 
     def _check_ai_client_existence(self, ai_name: str):
         """
@@ -197,6 +183,7 @@ class AIManager:
         :return: Response string
         """
         self._check_ai_agent_not_existence(agent_name)
+
         agent = self.agent_dict[agent_name]
         response = agent.send_message(prompt)
         return response

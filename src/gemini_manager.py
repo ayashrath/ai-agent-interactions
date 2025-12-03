@@ -316,6 +316,13 @@ class GeminiAgent:
         db_manager.dump_history(self.history, project_name=project_name)
         self.history = []
 
+    def calculate_token_usage(self) -> int:
+        """
+        Calculates the total token usage (input + output)
+        :return: Total token usage
+        """
+        return self.input_token_count + self.output_token_count
+
     def calculate_cost(self) -> float:
         """
         Calculates the cost of the tokens used based on model pricing (Dec 2025 rates).
