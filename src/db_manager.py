@@ -4,18 +4,21 @@ The DB Manager
 
 from datetime import datetime
 import sqlite3
+import pathlib
 
 class DBManager:
     """
     The DB Manager class
     """
     def __init__(self, table_name: str = "", db: str = "chat_history.sqlite"):
-        self.conn = sqlite3.connect("data/" + db)
+        file_dir_path = str(pathlib.Path(__file__).parent.resolve())
+        self.conn = sqlite3.connect(file_dir_path + "/../data/" + db)
         self.cur = self.conn.cursor()
 
         if table_name == "":
-            self.table_name = "default_chat"
+            self.table_name = "default_chat"  # not unique, debug stuff
         else:
+            table_name = table_name.replace("-", "_").replace(" ", "_") # as I usually forget
             self.table_name = table_name
 
     def create_table(self):

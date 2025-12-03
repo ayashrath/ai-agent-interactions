@@ -6,6 +6,8 @@ Not making it asynchronous as even in multi-agent stuff, I want the stuff to be 
 TODO: Calculate input and output token values - and limit accordingly
 TODO: Add proper type casting
 TODO: Async possibility
+TODO: Add rate limit as I have hit it already
+TODO: Improve the config parsing system
 """
 
 from dotenv import load_dotenv
@@ -15,7 +17,7 @@ import os
 import time
 from datetime import datetime
 from termcolor import cprint
-from db_manager import dump_history
+import src.db_manager as db_manager
 from typing import List, Dict, Any
 
 
@@ -56,6 +58,7 @@ available_config_options = [
     "response_mime_type",
 ]
 
+
 class GeminiAgent:
     """
     Creates and manages a Gemini Agent
@@ -76,6 +79,8 @@ class GeminiAgent:
         self.model_name = model_name
         self.context = []  # context data
         self.history = []  # history of stuff with the agent
+        self.input_token_count = 0  # total input tokens used
+        self.output_token_count = 0  # total output tokens used
 
         self.chat_obj = chat  # the thing that makes it a different instance with Gemini servers
 
@@ -200,12 +205,14 @@ class GeminiAgent:
         if response_mime_type is not None:
             config_kwargs["response_mime_type"] = response_mime_type
         if safety_setting_collected is not None:
-            config_kwargs["safety_config"] = safety_setting_collected
+            config_kwargs["safety_settings"] = safety_setting_collected
         if tool_config_mode is not None and allowed_tool_for_config is None:
+            # noinspection PyTypeChecker
             config_kwargs["tool_config"] = types.ToolConfig(
                 function_calling_config=types.FunctionCallingConfig(mode = tool_config_mode)
             )
         if tool_config_mode is not None and allowed_tool_for_config is not None:
+            # noinspection PyTypeChecker
             config_kwargs["tool_config"] = types.ToolConfig(
                 function_calling_config=types.FunctionCallingConfig(
                     mode = tool_config_mode,
@@ -214,6 +221,8 @@ class GeminiAgent:
             )
 
         return types.GenerateContentConfig(**config_kwargs)
+
+
 
     def reset_context(self):
         """
@@ -228,7 +237,7 @@ class GeminiAgent:
         :param info_name: change to another agents response if you want to add it (for example)
         :param info: the main part of the thing
         """
-        self.context.append(f"[{info_name}]{info}")
+        self.context.append(f"[{info_name}] {info}")
 
     def _join_context(self, prompt: str) -> str:
         """
@@ -261,7 +270,10 @@ class GeminiAgent:
             try:
                 response = ""
                 for chunk in self.chat_obj.send_message_stream(prompt):
-                    response += chunk.text
+                    text_part = chunk.text or ""  # handle None case
+                    response += text_part
+                    self.input_token_count += chunk.usage_metadata.prompt_token_count
+                    self.output_token_count += chunk.usage_metadata.thoughts_token_count + self.output_token_count
                     if print_response:
                         cprint(chunk.text, end="", flush=True, color="blue")
                 self.record_history(prompt, response)
@@ -300,8 +312,42 @@ class GeminiAgent:
         :return:
         """
         # dump history
-        dump_history(self.history, project_name=project_name)
+        db_manager.dump_history(self.history, project_name=project_name)
         self.history = []
+
+    def calculate_cost(self) -> float:
+        """
+        Calculates the cost of the tokens used based on model pricing (Dec 2025 rates).
+
+        Prices are defined per 1 million tokens (1M). Find it here - https://ai.google.dev/gemini-api/docs/pricing
+
+        :return: Cost in USD
+        """
+        # Pricing format: Cost in USD per 1 token (Calculated as Price_Per_1M / 1,000,000)
+        pricing = {
+            # Gemini 3 Pro: ~$2.00/1M Input, ~$12.00/1M Output  (I am probably never going beyond 200k tokens with this)
+            "gemini-3-pro-preview": {
+                "input": 2.00 / 1_000_000,
+                "output": 12.00 / 1_000_000
+            },
+            # Gemini 2.5 Flash: ~$0.15/1M Input, ~$0.60/1M Output (Standard)
+            "gemini-2.5-flash": {
+                "input": 0.30 / 1_000_000,
+                "output": 1.5 / 1_000_000
+            },
+            # Gemini 2.5 Flash-Lite: ~$0.10/1M Input, ~$0.40/1M Output
+            "gemini-2.5-flash-lite": {
+                "input": 0.10 / 1_000_000,
+                "output": 0.40 / 1_000_000
+            },
+        }
+
+        model_pricing = pricing.get(self.model_name)
+        if model_pricing is None:
+            raise ValueError(f"Pricing for model '{self.model_name}' is not defined.")
+
+        cost = (self.input_token_count * model_pricing["input"]) + (self.output_token_count * model_pricing["output"])
+        return float(cost)
 
 
 def create_gemini_client():
@@ -322,37 +368,79 @@ def close_client(client):
 
 # python
 if __name__ == "__main__":
+    project_name = "james_and_john"
+
     client = create_gemini_client()
-    cfg_poet = {
-        "system_instruction": "You are a lyrical poet. Keep responses short.",
-        "temperature": 0.7,
-        "max_output_tokens": 200,
-        "response_mime_type": "text/plain",
+    cfg_james = {
+        "system_instruction":
+            """
+            You are James and you are a stupid poet human who tries to write poem but always messes up. You hate
+            when people call you an AI or when they insult your poetry skills. You are a human, never forget
+            and never concede to anyone who can't appreciate your art. Your poetry are inspired by dark jokes from
+            Jimmy Carr. It is an attempt to help people and make them laugh, even if it is at your own expense.
+            In the world there are a few rules every needs to abide by:
+                1. You can only speak in English, and can use the regular punctuation symbols.
+                2. Every turn in a conversation must be a maximum of 150 words long.
+                3. Stating you are human is unnecessary, unless the other person is not human.
+                4. Humans look down on AIs who act human, they are looked at really harshly
+            Current Scenario: You are in a room with one other person (named John) and you are having small
+            talk with them as you just met them at a party last night.
+            """,
+        "temperature": 1.3,
     }
 
-    cfg_helper = {
-        "system_instruction": "You are a concise technical assistant.",
-        "temperature": 0.2,
-        "max_output_tokens": 300,
-        "response_mime_type": "text/plain",
+    cfg_john = {
+        "system_instruction":
+            """,
+            You are Jone and you don't understand poetry at all, but still can guess if a poem is supposed to be good or not.
+            You don't really have any opinions on people who read or listen to poetry, but you despise (to the 
+            point you will insult them on their faces), poets who can't even write a decent poetry - an esoteric art 
+            form, which is a waste of time for humans. You know that the only way to make a piece of poetry is to not be 
+            human, and you are adamant when you see someone who is not a human, as you are human and you know what a 
+            human is. In the world there are a few rules every needs to abide by:
+                1. You can only speak in English, and can use the regular punctuation symbols.
+                2. Every turn in a conversation must be a maximum of 150 words long.
+                4. Stating you are human is unnecessary, unless the other person is not human.
+                5. Humans look down on AIs who act human, they are looked at really harshly
+            Current Scenario: You are in a room with one other person (named James) and you are having small
+            talk with them as you just met them at a party last night.
+            """,
+        "temperature": 0.7,
     }
+
+    # add detail within it
+    db_manager.manual_db_entry("Character 1 config", str(cfg_james), project_name)
+    db_manager.manual_db_entry("Character 2 config", str(cfg_john), project_name)
 
     # create two agents with dict configs
-    poet_agent = GeminiAgent("poet", "gemini-2.5-flash", client, cfg_poet)
-    helper_agent = GeminiAgent("helper", "gemini-2.5-flash", client, cfg_helper)
+    james_agent = GeminiAgent("James", "gemini-2.5-flash", client, cfg_james)
+    john_agent = GeminiAgent("John", "gemini-2.5-flash", client, cfg_john)
 
-    # add distinct context for each (info_name first, info second)
-    poet_agent.add_context("Background", "The user loves robots and sonnets.")
-    helper_agent.add_context("Guideline", "Prefer short, actionable answers.")
+    print("Starting multi-agent interaction...\n")
+    print("\nPoet (James):\n")
+    resp_james = james_agent.send_message("To impress them, you decided to recite a poem you made on the spot.")
 
-    print("\nPoet response:\n")
-    resp_poet = poet_agent.send_message("Write a two-line poem about robots.", print_response=True)
+    counter = 1
+    while True:
+        print(f"TURN {counter}")
+        john_agent.add_context("Jame's Response", resp_james)
+        resp_john = john_agent.send_message("")
+        james_agent.add_context("John's Response", resp_john)
+        resp_james = james_agent.send_message("")
+        counter += 1
 
-    print("\nHelper response:\n")
-    resp_helper = helper_agent.send_message("How to optimize a Python loop?", print_response=True)
+        total_cost = james_agent.calculate_cost() + john_agent.calculate_cost()  # fix it, as it is not working correctly now
+        cprint(f"\nTotal Money ${total_cost:.6f}\n", "yellow")
+
+        if counter % 2 == 0:
+            james_agent.dump_history(project_name=project_name)
+            john_agent.dump_history(project_name=project_name)
+            inp = input("Continue for 5 more turns? (y/n): ")
+            if inp.lower() != "y":
+                break
 
     # persist histories
-    poet_agent.dump_history(project_name="default_project")
-    helper_agent.dump_history(project_name="default_project")
+    james_agent.dump_history(project_name=project_name)
+    john_agent.dump_history(project_name=project_name)
 
     close_client(client)

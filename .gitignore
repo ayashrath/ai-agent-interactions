@@ -12,3 +12,9 @@
 
 # data
 data/
+
+# for my testing purposes
+game/
+
+# when installing stuff here
+ai_interactions.egg-info/
