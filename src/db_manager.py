@@ -6,6 +6,7 @@ from datetime import datetime
 import sqlite3
 import pathlib
 
+
 class DBManager:
     """
     The DB Manager class

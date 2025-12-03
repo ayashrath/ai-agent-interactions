@@ -22,12 +22,15 @@ And the following functions:
     - calculate_cost: calculates cost based on history
 
 And based on requirements the model might have constants to define possible models, parameters, etc.
+
+TODO: TMP not checked for now, as well as RPD and RPM handling
 """
 
 import src.gemini_manager as gm
 from typing import Any, List, Dict
 from termcolor import cprint
 import tomllib
+import time
 
 # const
 SUPPORTED_AI = [
@@ -51,7 +54,22 @@ class AIManager:
     def __init__(self):
         self.agent_dict = {}
         self.client_dict = {}
+        self.rmp = None  # requests per minute
+        self.tpm = None  # tokens per minute
+        self.rpd = None  # requests per day
+
         cprint("Use lowercase for names", "red")
+
+    def set_limits(self, rpm, tpm, rpd):
+        """
+        Sets the rate limits for all AI clients
+        :param rpm: Requests per minute
+        :param tpm: Tokens per minute
+        :param rpd: Requests per day
+        """
+        self.rmp = rpm
+        self.tpm = tpm
+        self.rpd = rpd
 
     def _check_ai_client_existence(self, ai_name: str):
         """
@@ -155,6 +173,22 @@ class AIManager:
         agent = self.agent_dict[agent_name]
         agent.add_context(context_name, context_info)
 
+    def _handle_rate_limit_wait(self, wait_time:float, limit_type:str):
+        """
+        Handles waiting for rate limits
+        :param wait_time: Time to wait in seconds
+        :param limit_type: Type of limit (rpm, tpm, rpd)
+        """
+        cprint(f"Rate limit reached for {limit_type}. Waiting for {wait_time:.2f} seconds...", "yellow")
+        inp = input("Wait for a bit? (y/n): ")
+        if inp.lower() != "y":
+            cprint(f"Waiting for {wait_time:.2f} seconds", "yellow")
+            time.sleep(wait_time)
+        else:
+            cprint("Quitting due to rate limit", "red")
+            quit()
+        time.sleep(wait_time)
+
     def send_message(self, agent_name: str, prompt: str) -> str:
         """
         Sends a message to an AI agent and gets the response
@@ -163,7 +197,6 @@ class AIManager:
         :return: Response string
         """
         self._check_ai_agent_not_existence(agent_name)
-
         agent = self.agent_dict[agent_name]
         response = agent.send_message(prompt)
         return response

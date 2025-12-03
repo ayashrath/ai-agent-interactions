@@ -272,10 +272,11 @@ class GeminiAgent:
                 for chunk in self.chat_obj.send_message_stream(prompt):
                     text_part = chunk.text or ""  # handle None case
                     response += text_part
-                    self.input_token_count += chunk.usage_metadata.prompt_token_count
-                    self.output_token_count += chunk.usage_metadata.thoughts_token_count + self.output_token_count
                     if print_response:
                         cprint(chunk.text, end="", flush=True, color="blue")
+                self.input_token_count += chunk.usage_metadata.prompt_token_count
+                self.output_token_count += chunk.usage_metadata.candidates_token_count
+
                 self.record_history(prompt, response)
                 self.reset_context()
                 if print_response:
