@@ -16,8 +16,8 @@ class TextToSpeechManager:
     @staticmethod
     def convert_text_to_speech(
             text: str, action: str = 'speak', speech_voice: str = "en-US-Ava:DragonHDLatestNeural",
-            rate : float = 1.0
-    )-> speechsdk.SpeechSynthesisResult:
+            rate: float = 1.0
+    ) -> speechsdk.SpeechSynthesisResult:
         """
         Converts text to speech and plays it.
         :param text: Text to convert to speech.
@@ -36,8 +36,8 @@ class TextToSpeechManager:
         speech_config.speech_synthesis_voice_name = speech_voice  # name of the voice
 
         speech_synthesizer = speechsdk.SpeechSynthesizer(
-            speech_config = speech_config,
-            audio_config = audio_config
+            speech_config=speech_config,
+            audio_config=audio_config
         )  # synthesiser object
 
         # rate using SSML

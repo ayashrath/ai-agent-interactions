@@ -12,14 +12,17 @@ class DBManager:
     The DB Manager class
     """
     def __init__(self, table_name: str = "", db: str = "chat_history.sqlite"):
-        file_dir_path = str(pathlib.Path(__file__).parent.resolve())
-        self.conn = sqlite3.connect(file_dir_path + "/../data/" + db)
+        file_dir_path = pathlib.Path(__file__).parent.resolve()
+        data_dir_path = file_dir_path.joinpath("../data/")
+        data_dir_path.mkdir(parents=False, exist_ok=True)  # creates if not exist (useful as the git repo ignores data)
+
+        self.conn = sqlite3.connect(str(data_dir_path) + db)
         self.cur = self.conn.cursor()
 
         if table_name == "":
             self.table_name = "default_chat"  # not unique, debug stuff
         else:
-            table_name = table_name.replace("-", "_").replace(" ", "_") # as I usually forget
+            table_name = table_name.replace("-", "_").replace(" ", "_")  # as I usually forget
             self.table_name = table_name
 
     def create_table(self):
@@ -58,7 +61,6 @@ class DBManager:
             )
         )
 
-
     def insert_history(self, history):
         """
         Insert history into the database
@@ -86,7 +88,7 @@ class DBManager:
         self.conn.close()
 
 
-def dump_history(history, project_name = ""):
+def dump_history(history, project_name=""):
     """
     Dump history stuff
 
@@ -98,7 +100,8 @@ def dump_history(history, project_name = ""):
     dbmanager.insert_history(history)
     dbmanager.close()
 
-def manual_db_entry(name: str, message: str, project_name = ""):
+
+def manual_db_entry(name: str, message: str, project_name=""):
     """
     Insert a manual entry into the database
 

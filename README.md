@@ -3,30 +3,51 @@
 I was inspired by [DougDoug's](https://www.youtube.com/@DougDoug) AI videos, and wanted to make something similar.
 Thus, I am making this. Shall add more detail on the project as I move further.
 
-## The current plan (subject to change)
+Currently the scripts are able to provide ability to use Gemini API to have multi-agent conversation interactions.
 
-Have $n$ AI agents that are in the setting of a discussion board with different personalities. The specifics are not
-yet clear, but there are two things I want to integrate
+## The files
 
-- democracy
-- provide access to do anything within a certain dir (full access, but can't go beyond it!)
+```
+├── data  # shall be created by default when you run the scripts
+│   └── chat_history.sqlite  # the sqlite db where the data is stored
+├── game_samples  # sample code provided on how the tool can be used - three scenarios
+│   ├── 01_simple_chatbot  
+│   ├── 02_james_and_john
+│   │   ├── james.toml
+│   │   ├── johns.toml
+│   │   ├── main.py
+│   │   └── README.md
+│   └── 03_board_discussion
+│       └── README.md
+├── README.md
+├── requirements.txt
+├── setup.py
+└── src
+    ├── ai_manager.py  # unifies the interface with all the different ai managers
+    ├── db_manager.py  # the interface to the db
+    ├── gemini_manager.py  # utilises the gemini api and provided an interface
+    ├── __init__.py
+    └── text_to_speech_manager.py  # the azure text-to-speech (tts) interace
+```
 
-Also to make sure the project is close to DougDoug's streams the following needs to be created
+## Setup
 
-- a ui that shows the conversations
-- an audio narrating the responses
+- Install Python Packages within a virtual environemnt
+- Set up environment variables
 
-## Timeline for Phase 1
 
-I need to implement the above by the end of the week - so 7th December 2025.
+## Future Plan
 
-## Future Plan (subject to change)
+- Create an GUI to view the conversations of the agents
+- Add support for 
+  - OpenAI
+  - Claude
+  - DeepSeek
+  - Grok
+  - Meta
+- Make the code good
 
-These are features that I will add much later, not within this time period (this interval of developing this).
+## Note
 
-- add openai api manager (as I have $5 tokens bought and have not used, that expire next year April!)
-- add deepseek api manager
-- add claude api manager
-- add grok api manager
-- add meta ai api manager
-- make it programmatically efficient
+- There is no definite timeline for me to add new features
+- The scripts will break as the APIs are always changing. I am not a commitment to maintain these - it just an interesting thing I wanted to make.

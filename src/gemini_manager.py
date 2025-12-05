@@ -209,20 +209,18 @@ class GeminiAgent:
         if tool_config_mode is not None and allowed_tool_for_config is None:
             # noinspection PyTypeChecker
             config_kwargs["tool_config"] = types.ToolConfig(
-                function_calling_config=types.FunctionCallingConfig(mode = tool_config_mode)
+                function_calling_config=types.FunctionCallingConfig(mode=tool_config_mode)
             )
         if tool_config_mode is not None and allowed_tool_for_config is not None:
             # noinspection PyTypeChecker
             config_kwargs["tool_config"] = types.ToolConfig(
                 function_calling_config=types.FunctionCallingConfig(
-                    mode = tool_config_mode,
+                    mode=tool_config_mode,
                     allowed_function_names=allowed_tool_for_config,
                 )
             )
 
         return types.GenerateContentConfig(**config_kwargs)
-
-
 
     def reset_context(self):
         """
@@ -370,6 +368,7 @@ def create_gemini_client():
 
     return client
 
+
 def close_client(client):
     client.close()
 
@@ -400,11 +399,11 @@ if __name__ == "__main__":
     cfg_john = {
         "system_instruction":
             """,
-            You are Jone and you don't understand poetry at all, but still can guess if a poem is supposed to be good or not.
-            You don't really have any opinions on people who read or listen to poetry, but you despise (to the 
-            point you will insult them on their faces), poets who can't even write a decent poetry - an esoteric art 
-            form, which is a waste of time for humans. You know that the only way to make a piece of poetry is to not be 
-            human, and you are adamant when you see someone who is not a human, as you are human and you know what a 
+            You are Jone and you don't understand poetry at all, but still can guess if a poem is supposed to be good
+            or not. You don't really have any opinions on people who read or listen to poetry, but you despise (to the
+            point you will insult them on their faces), poets who can't even write a decent poetry - an esoteric art
+            form, which is a waste of time for humans. You know that the only way to make a piece of poetry is to not be
+            human, and you are adamant when you see someone who is not a human, as you are human and you know what a
             human is. In the world there are a few rules every needs to abide by:
                 1. You can only speak in English, and can use the regular punctuation symbols.
                 2. Every turn in a conversation must be a maximum of 150 words long.
@@ -437,7 +436,7 @@ if __name__ == "__main__":
         resp_james = james_agent.send_message("")
         counter += 1
 
-        total_cost = james_agent.calculate_cost() + john_agent.calculate_cost()  # fix it, as it is not working correctly now
+        total_cost = james_agent.calculate_cost() + john_agent.calculate_cost()
         cprint(f"\nTotal Money ${total_cost:.6f}\n", "yellow")
 
         if counter % 2 == 0:

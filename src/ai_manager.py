@@ -23,22 +23,22 @@ And the following functions:
 
 And based on requirements the model might have constants to define possible models, parameters, etc.
 
-TODO: TMP not checked for now
+TODO: Rate limits based on RDM, TMP and RPD has not been created
 """
 
 import src.gemini_manager as gm
 from typing import Any, List, Dict
 from termcolor import cprint
 import tomllib
-import time
+
 
 # const
-SUPPORTED_AI = [
+SUPPORTED_AI: List[str] = [
     "gemini",
 ]
 
 
-def check_ai_support(ai_name: str):
+def check_ai_support(ai_name: str) -> None:
     """
     Checks if the AI is supported
     :param ai_name: Name of the AI
@@ -46,6 +46,7 @@ def check_ai_support(ai_name: str):
     """
     if ai_name not in SUPPORTED_AI:
         raise ValueError(f"{ai_name} is not supported!")
+
 
 class AIManager:
     """
@@ -137,7 +138,6 @@ class AIManager:
             )
             self.agent_dict[agent_name] = agent
 
-
     def delete_agent(self, name: str):
         """
         Deletes an AI agent from the manager
@@ -158,22 +158,6 @@ class AIManager:
 
         agent = self.agent_dict[agent_name]
         agent.add_context(context_name, context_info)
-
-    def _handle_rate_limit_wait(self, wait_time:float, limit_type:str):
-        """
-        Handles waiting for rate limits
-        :param wait_time: Time to wait in seconds
-        :param limit_type: Type of limit (rpm, tpm, rpd)
-        """
-        cprint(f"Rate limit reached for {limit_type}. Waiting for {wait_time:.2f} seconds...", "yellow")
-        inp = input("Wait for a bit? (y/n): ")
-        if inp.lower() != "y":
-            cprint(f"Waiting for {wait_time:.2f} seconds", "yellow")
-            time.sleep(wait_time)
-        else:
-            cprint("Quitting due to rate limit", "red")
-            quit()
-        time.sleep(wait_time)
 
     def send_message(self, agent_name: str, prompt: str) -> str:
         """
@@ -243,10 +227,6 @@ def make_agent_toml_char_sheet(manager: AIManager, char_sheet_path: str) -> str:
     \"""
     tools = []
     max_output_tokens = 512
-    [config.safety_setting]  # should be the last one
-        HARM_CONTENT_HARASSMENT = "BLOCK_ONLY_HIGH"
-        HARM_CATEGORY_HATE_SPEECH = "BLOCK_ONLY_HIGH"
-
     ```
     """
     with open(char_sheet_path, "rb") as fh:  # ensures UTF-8 encoding (forced)
